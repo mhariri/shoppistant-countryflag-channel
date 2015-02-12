@@ -1,11 +1,9 @@
 import json
-import re
-import urllib2
 import datetime
-from PIL import Image, ImageDraw, ImageFont
 import logging
 
 import webapp2
+
 from mapping import mappings
 
 
@@ -15,8 +13,6 @@ PLUGIN_INFO = {
 
 # cache for 2 days
 EXPIRATION_IN_SECONDS = 2 * 24 * 60 * 60
-rating_font = ImageFont.truetype("Roboto-Bold.ttf", 18)
-rating_footer_font = ImageFont.truetype("Roboto-Bold.ttf", 9)
 
 
 class GMT(datetime.tzinfo):
@@ -39,32 +35,40 @@ def get_expiration_stamp(seconds):
     return expiration.strftime("%a, %d %b %Y %H:%M:%S %Z")
 
 
+class CountryMappingNotFound(Exception):
+    pass
+
+
+def find_mapping(prefix):
+    for m in mappings:
+        if prefix >= m[0] and prefix <= m[1]:
+            return (m[3], "flags/flags_iso/32/%s.png" % m[2])
+    raise CountryMappingNotFound()
+
+
 class MainHandler(webapp2.RequestHandler):
     def get(self):
         self.set_default_headers()
 
         barcode = self.request.params.get("q", None)
         if barcode:
-            url = "http://www.amazon.com/s/ref=nb_sb_noss?field-keywords=" + barcode
+
             open_details = self.request.params.get("d", None)
             if open_details:
-                self.redirect(str(url))
+                self.redirect("http://www.gs1.org/company-prefix")
             else:
                 try:
-                    request = urllib2.Request(url, None, {'Referrer': 'http://shoppistant.com'})
-                    response = urllib2.urlopen(request)
-                    m = re.search("(\d*\.?\d*) out of 5 stars", response.read())
-                    if m:
-                        self.send_rating_image(m.group(1))
-                except urllib2.HTTPError, e:
+                    prefix = barcode[0:3]
+                    (country, flag) = find_mapping(prefix)
+                    self.send_rating_image(country, flag)
+                except CountryMappingNotFound:
                     # amazon sometimes blocks the request,
                     # just log and ignore it silently
-                    error = "Error querying amazon: " + str(e)
+                    error = "No country mapping found for: " + str(prefix)
                     logging.error(error)
                     self.response.write(error + "\n")
+                    self.response.status = 404
 
-                self.response.write("Not found")
-                self.response.status = 404
         else:
             self.response.content_type = "application/json"
             self.response.write(json.dumps(PLUGIN_INFO))
@@ -76,14 +80,9 @@ class MainHandler(webapp2.RequestHandler):
         self.response.headers["Content-Type"] = "application/json"
         self.response.headers["Cache-Control"] = "public, max-age=%d" % EXPIRATION_IN_SECONDS
 
-    def send_rating_image(self, rating):
-        img = Image.open("rating_background.png")
-        draw = ImageDraw.Draw(img)
-        w, _ = draw.textsize(rating)
-        draw.text((23 - w / 2, 4), rating, (250, 153, 26), font=rating_font)
-        draw.text((20, 25), "of 5", (225, 129, 37), font=rating_footer_font)
+    def send_rating_image(self, country, flag):
         self.response.content_type = "image/png"
-        img.save(self.response, "PNG")
+        self.response.body_file = open(flag)
 
 
 app = webapp2.WSGIApplication([

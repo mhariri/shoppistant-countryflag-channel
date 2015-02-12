@@ -7,7 +7,11 @@
 
 import iso3166
 
-mappings = [
+# this will contain final mappings, all rows in this format:
+# [range start, range end, country 2 letter code] for example:
+# ['001','002', 'ir']
+mappings = []
+_mappings = [
     [0, 19, 'United States'],
     [20, 29, 'Restricted distribution (MO defined)'],
     [30, 39, 'United States'],
@@ -133,7 +137,7 @@ mappings = [
     [978, 979, 'Bookland (ISBN)'],
     [980, 'Refund receipts'],
     [981, 984, 'coupon identification for common currency areas'],
-    [99, 'coupon identification']]
+    [990, 999, 'coupon identification']]
 
 
 def find_country(name):
@@ -146,8 +150,15 @@ def find_country(name):
             return c
     raise KeyError
 
-for c in mappings:
+
+for c in _mappings:
     try:
-        c[-1] = find_country(c[-1]).alpha2.lower()
+        ccode = find_country(c[-1]).alpha2.lower()
+        range_start = "%03d" % c[0]
+        if len(c) > 2:
+            range_end = "%03d" % c[1]
+        else:
+            range_end = range_start
+        mappings.append([range_start, range_end, ccode, c[-1]])
     except KeyError:
-        print "Could not lookup %s in countries"%c[-1]
+        print "Could not lookup '%s' in countries" % c[-1]

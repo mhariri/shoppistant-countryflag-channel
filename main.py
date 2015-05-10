@@ -46,28 +46,31 @@ def find_mapping(prefix):
     raise CountryMappingNotFound()
 
 
+def wikipedia_url(country):
+    return "http://en.wikipedia.org/wiki/%s"%country
+
+
 class MainHandler(webapp2.RequestHandler):
     def get(self):
         self.set_default_headers()
 
         barcode = self.request.params.get("q", None)
         if barcode:
-
-            open_details = self.request.params.get("d", None)
-            if open_details:
-                self.redirect("http://www.gs1.org/company-prefix")
-            else:
-                try:
-                    prefix = barcode[0:3]
-                    (country, flag) = find_mapping(prefix)
+            prefix = barcode[0:3]
+            try:
+                (country, flag) = find_mapping(prefix)
+                open_details = self.request.params.get("d", None)
+                if open_details:
+                    self.redirect(wikipedia_url(country))
+                else:
                     self.send_rating_image(country, flag)
-                except CountryMappingNotFound:
-                    # amazon sometimes blocks the request,
-                    # just log and ignore it silently
-                    error = "No country mapping found for: " + str(prefix)
-                    logging.error(error)
-                    self.response.write(error + "\n")
-                    self.response.status = 404
+            except CountryMappingNotFound:
+                # amazon sometimes blocks the request,
+                # just log and ignore it silently
+                error = "No country mapping found for: " + prefix
+                logging.error(error)
+                self.response.write(error + "\n")
+                self.response.status = 404
 
         else:
             self.response.content_type = "application/json"
